@@ -120,6 +120,19 @@ def test_parser_rejects_unknown_cue_codes(direct_vm, direct_deploy, direct_alice
         contract._parse_assessment(result(cue_codes=["roof_loss", "confidence:100%!"]))
 
 
+def test_leader_parser_accepts_hash_commitments_from_leader_output(direct_vm, direct_deploy, direct_alice):
+    contract = deploy(direct_deploy)
+    raw = json.loads(result())
+    raw["before_image_sha256"] = "a" * 64
+    raw["after_image_sha256"] = "b" * 64
+
+    parsed = contract._assessment_from_leader(raw)
+
+    assert parsed["observed_change"] == "yes"
+    assert parsed["before_image_sha256"] == "a" * 64
+    assert parsed["after_image_sha256"] == "b" * 64
+
+
 def test_consensus_commits_image_hashes_and_bounded_decision(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     direct_vm.mock_llm(r"(?s).*AFTERLINE_VISUAL_REVIEW.*", result())
