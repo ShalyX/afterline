@@ -12,7 +12,7 @@ The first release targets public disaster imagery and response teams. Image byte
 
 ## Current product state
 
-The current StudioNet deployment is `0x39CA4c8686E536d57Eb425996066742be790Dc8e`. The public desk is available at [afterline-shalyxs-projects.vercel.app](https://afterline-shalyxs-projects.vercel.app/). A live wallet-backed control assessment is committed on-chain as `af-789d4557-71d6-4c1d-83a8-878a984757ba`; its before and after SHA-256 commitments match and the contract readback is `no_damage`, `observed_change: no`, `evidence_quality: clear`, `confidence_band: high`, and `priority: routine_review`.
+The current StudioNet deployment is `0x39CA4c8686E536d57Eb425996066742be790Dc8e`. The public desk is available at [afterline-shalyxs-projects.vercel.app](https://afterline-shalyxs-projects.vercel.app/), with the [contract explorer](https://explorer-studio.genlayer.com/address/0x39CA4c8686E536d57Eb425996066742be790Dc8e) and [live control assessment](https://afterline-shalyxs-projects.vercel.app/assessments/af-789d4557-71d6-4c1d-83a8-878a984757ba) available for review. The assessment is committed on-chain; its before and after SHA-256 commitments match and the contract readback is `no_damage`, `observed_change: no`, `evidence_quality: clear`, `confidence_band: high`, and `priority: routine_review`.
 
 The identical-byte control is intentionally resolved deterministically before nondeterministic visual analysis. Changed image pairs still use GenLayer validator consensus and fail closed when validators disagree on image hashes, visible change, evidence quality, confidence threshold, or routing priority. No field-practitioner review has been completed yet.
 
