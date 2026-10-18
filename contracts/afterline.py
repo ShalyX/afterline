@@ -292,7 +292,12 @@ def _leader_assessment(raw_value) -> dict:
         "rationale",
     }
     commitment_fields = {"before_image_sha256", "after_image_sha256"}
-    if set(leader_value.keys()) != assessment_fields | commitment_fields:
+    derived_fields = {"priority"}
+    allowed_shapes = (
+        assessment_fields | commitment_fields,
+        assessment_fields | commitment_fields | derived_fields,
+    )
+    if set(leader_value.keys()) not in allowed_shapes:
         raise gl.vm.UserError(f"{ERROR_LLM} leader response must contain assessment fields and image commitments")
 
     result = _parse_assessment({field: leader_value[field] for field in assessment_fields})

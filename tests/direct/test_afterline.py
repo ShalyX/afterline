@@ -133,6 +133,18 @@ def test_leader_parser_accepts_hash_commitments_from_leader_output(direct_vm, di
     assert parsed["after_image_sha256"] == "b" * 64
 
 
+def test_leader_parser_accepts_derived_priority_from_leader_output(direct_vm, direct_deploy, direct_alice):
+    contract = deploy(direct_deploy)
+    raw = json.loads(result())
+    raw["before_image_sha256"] = "a" * 64
+    raw["after_image_sha256"] = "b" * 64
+    raw["priority"] = "routine_review"
+
+    parsed = contract._assessment_from_leader(raw)
+
+    assert parsed["priority"] == "urgent_review"
+
+
 def test_consensus_commits_image_hashes_and_bounded_decision(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     direct_vm.mock_llm(r"(?s).*AFTERLINE_VISUAL_REVIEW.*", result())
