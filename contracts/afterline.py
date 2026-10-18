@@ -241,34 +241,44 @@ cue codes. Do not estimate casualties, occupancy, repair cost, cause, or safety.
 
 def _equivalent(leader: dict, validator: dict) -> bool:
     required = (
-        "damage_level",
         "observed_change",
         "evidence_quality",
-        "confidence_band",
-        "priority",
         "before_image_sha256",
         "after_image_sha256",
     )
     if any(field not in leader or field not in validator for field in required):
         return False
 
-    leader_damage_band = "severe" if leader["damage_level"] in ("major", "destroyed") else leader["damage_level"]
-    validator_damage_band = "severe" if validator["damage_level"] in ("major", "destroyed") else validator["damage_level"]
-
-    # Validators must agree on the route and evidence integrity. Major/destroyed
-    # share the urgent route; cue codes and rationale are supporting descriptions,
-    # not independent policy gates.
+    # The public contract claim is deliberately narrow: validators must agree
+    # that the same committed image pair shows a visible change (or does not)
+    # and whether that evidence is usable. Severity, confidence, cue codes,
+    # rationale, and the derived route remain lead-model detail. Requiring
+    # those descriptive fields to match made real changed pairs fail closed on
+    # harmless model wording variance without improving evidence integrity.
     return all(
         (
-            leader_damage_band == validator_damage_band,
             leader.get("observed_change") == validator.get("observed_change"),
             leader.get("evidence_quality") == validator.get("evidence_quality"),
-            leader.get("priority") == validator.get("priority"),
-            (leader.get("confidence_band") == "high") == (validator.get("confidence_band") == "high"),
             leader.get("before_image_sha256") == validator.get("before_image_sha256"),
             leader.get("after_image_sha256") == validator.get("after_image_sha256"),
         )
     )
+
+
+def _conservative_priority(result: dict) -> str:
+    """Route only the consensus-stable visible-change finding.
+
+    A changed pair is always a human-review item. The contract must not turn
+    one lead model's severity or confidence into an autonomous urgent route
+    when those details are intentionally outside the consensus boundary.
+    """
+    if (
+        result.get("observed_change") == "no"
+        and result.get("evidence_quality") == "clear"
+        and result.get("confidence_band") == "high"
+    ):
+        return "routine_review"
+    return "human_review"
 
 
 def _leader_assessment(raw_value) -> dict:
@@ -364,6 +374,7 @@ class Afterline(gl.Contract):
                     return False
 
             result = dict(gl.vm.run_nondet_unsafe(leader_fn, validator_fn))
+        result["priority"] = _conservative_priority(result)
         self.assessments[assessment_id] = Assessment(
             assessment_id=assessment_id,
             submitter=gl.message.sender_address,

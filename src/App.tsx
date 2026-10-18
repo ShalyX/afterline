@@ -276,7 +276,7 @@ function App() {
             <div>
               <p className="kicker"><span /> FIELD OPERATIONS / 01</p>
               <h1>Read the change.<br /><em>Move with evidence.</em></h1>
-              <p className="overview-copy">Compare public satellite imagery across an incident. GenLayer validators review the same before-and-after pair, then commit a human-review priority to the record.</p>
+              <p className="overview-copy">Compare public satellite imagery across an incident. GenLayer validators review the same before-and-after pair, then commit a visible-change finding and evidence-quality result for human review.</p>
               <button className="button primary" onClick={() => navigate({ kind: "new" })}>Start an image review <ArrowRight size={15} /></button>
             </div>
             <div className="compare-art" aria-label="Illustration showing an earlier and later satellite image separated by a comparison line">
@@ -291,7 +291,7 @@ function App() {
 
           <section className="rule-strip" aria-label="Assessment safeguards">
             <div><span>01</span><strong>Two images</strong><small>Same site, earlier and later</small></div>
-            <div><span>02</span><strong>Vision consensus</strong><small>Hashes, change, quality &amp; triage band</small></div>
+            <div><span>02</span><strong>Vision consensus</strong><small>Hashes, change &amp; evidence quality</small></div>
             <div><span>03</span><strong>Human review</strong><small>No automatic safety decisions</small></div>
             <div><span>04</span><strong>Public record</strong><small>Hashes and result on StudioNet</small></div>
           </section>
@@ -364,7 +364,7 @@ function App() {
               <div className="result-grid">
                 <div><span>Evidence quality</span><strong>{record.evidence_quality}</strong></div><div><span>Confidence</span><strong>{record.confidence_band}</strong></div><div><span>Site</span><strong>{record.location_label}</strong></div><div><span>Recorded</span><strong>{formatDate(record.created_at)}</strong></div>
               </div>
-              <section className="rationale-panel"><p className="kicker">LEAD MODEL RATIONALE</p><p>{record.rationale}</p><div className="cue-list">{JSON.parse(record.cue_codes_json || "[]").map((code: string) => <span key={code}>{code.replaceAll("_", " ")}</span>)}</div><p className="consensus-scope">Consensus verifies the image hashes, visible-change finding, evidence quality, broad damage band, confidence threshold, and review priority. Cue codes and rationale are the lead model’s supporting description, not separate consensus votes.</p></section>
+              <section className="rationale-panel"><p className="kicker">LEAD MODEL RATIONALE</p><p>{record.rationale}</p><div className="cue-list">{JSON.parse(record.cue_codes_json || "[]").map((code: string) => <span key={code}>{code.replaceAll("_", " ")}</span>)}</div><p className="consensus-scope">Consensus verifies the image hashes, visible-change finding, and evidence quality. Damage label, confidence, cue codes, rationale, and routing are lead-model context; changed pairs remain human-review items.</p></section>
               <div className="boundary-inline"><ShieldAlert size={16} /><span>Human review required. This record is not a structural-safety assessment and should not be used to make evacuation or aid eligibility decisions by itself.</span></div>
             </div>
             <aside className="detail-side">

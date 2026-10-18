@@ -29,7 +29,7 @@ Turn a cited pair of public before-and-after images into an auditable, consensus
 
 - Deploy the vision contract to StudioNet and confirm the validator/model path accepts both images in one transaction.
 - Run live positive, no-change, ambiguous, mismatched-pair, low-quality, malformed input, oversize input, and duplicate-ID cases.
-- Confirm the leader and validators agree on both image hashes, visible change, evidence quality, broad damage band, high-confidence threshold, and derived priority. Cue codes and rationale are supporting lead-model details, not separate consensus gates.
+- Confirm the leader and validators agree on both image hashes, visible change, and evidence quality. Damage severity, confidence, cue codes, rationale, and routing are supporting lead-model details; any changed pair is stored as `human_review`.
 - Inspect finalized reads from the contract. A transaction badge alone is not a successful assessment.
 
 ### 3. Product gate

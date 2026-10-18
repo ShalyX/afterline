@@ -126,7 +126,7 @@ def test_consensus_commits_image_hashes_and_bounded_decision(direct_vm, direct_d
     submit(contract, direct_vm, direct_alice)
     assessment = contract.get_assessment("flood-test-001")
     assert assessment["damage_level"] == "major"
-    assert assessment["priority"] == "urgent_review"
+    assert assessment["priority"] == "human_review"
     assert len(assessment["before_image_sha256"]) == 64
     assert len(assessment["after_image_sha256"]) == 64
     assert assessment["before_image_sha256"] != assessment["after_image_sha256"]
@@ -183,11 +183,27 @@ def test_consensus_accepts_same_triage_with_non_material_label_variance(direct_v
     assert contract._consensus_equivalent(leader, validator) is True
 
 
-def test_consensus_rejects_different_priority_or_observed_change(direct_vm, direct_deploy, direct_alice):
+def test_consensus_accepts_same_visible_change_when_lead_detail_varies(direct_vm, direct_deploy, direct_alice):
+    contract = deploy(direct_deploy)
+    leader = consensus_assessment(
+        damage_level="major",
+        confidence_band="high",
+        cue_codes=["standing_water"],
+    )
+    validator = consensus_assessment(
+        damage_level="minor",
+        confidence_band="medium",
+        cue_codes=["debris"],
+    )
+
+    assert contract._consensus_equivalent(leader, validator) is True
+
+
+def test_consensus_ignores_lead_priority_but_rejects_different_observed_change(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     leader = consensus_assessment()
 
-    assert contract._consensus_equivalent(leader, consensus_assessment(confidence_band="medium")) is False
+    assert contract._consensus_equivalent(leader, consensus_assessment(confidence_band="medium")) is True
     assert contract._consensus_equivalent(
         leader,
         consensus_assessment(observed_change="unclear", confidence_band="medium"),
@@ -219,10 +235,10 @@ def test_consensus_keeps_no_damage_and_minor_separate(direct_vm, direct_deploy, 
     assert contract._consensus_equivalent(no_damage, minor) is False
 
 
-def test_consensus_rejects_confidence_threshold_disagreement_even_when_both_need_review(direct_vm, direct_deploy, direct_alice):
+def test_consensus_accepts_confidence_threshold_disagreement_when_visible_change_matches(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     leader = consensus_assessment(evidence_quality="limited", confidence_band="high")
     validator = consensus_assessment(evidence_quality="limited", confidence_band="medium")
 
     assert leader["priority"] == validator["priority"] == "human_review"
-    assert contract._consensus_equivalent(leader, validator) is False
+    assert contract._consensus_equivalent(leader, validator) is True
