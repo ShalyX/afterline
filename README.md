@@ -1,20 +1,24 @@
 # Afterline
 
-Afterline is a disaster-response image triage desk built around GenLayer's native image processing. A field analyst submits a public, licensed before-and-after image pair for one site. Validators independently compare the images and check the stable fields behind the product claim: both image hashes, visible change, and evidence quality. The contract stores that evidence-bound finding for a human response team to review.
+Afterline is a disaster-response image triage desk built around GenLayer's native image processing. A field analyst submits a public, licensed before-and-after image pair for one site. Validators independently compare the images and check both image hashes, visible change, evidence quality, and confidence. The contract stores that finding for a human response team to review.
 
 Afterline helps teams identify image pairs that need human inspection. It does not declare a building safe, estimate casualties, approve insurance, or direct emergency operations. A changed pair is routed to `human_review`; the contract does not turn an unverified severity label into an autonomous urgent action.
 
 ## Why image consensus
 
-The core decision depends on whether the same two images show a visible change and whether the evidence is usable, not on a text page or a policy statement. Validators must agree on those stable fields and on both image commitments. The lead model's damage label, confidence, cue codes, and rationale are supporting descriptions; validators do not need identical wording or cue lists. A committed result therefore confirms the visible-change finding and evidence integrity, not pixel-level ground truth or every detailed label.
+Validators must agree on visible change, evidence quality, confidence, and both image commitments. Confidence disagreement rejects the proposed result, including a high-confidence leader versus a medium- or low-confidence validator. Routine review requires agreed high confidence, clear evidence, and no visible change. Damage labels, cue codes, and rationale remain supporting descriptions rather than independently agreed facts.
 
 The first release targets public disaster imagery and response teams. Image bytes are included in a public GenLayer transaction. Submit only public, licensed, non-sensitive images. Do not submit private claimant photos, identifiable people, addresses, or evidence subject to a confidentiality restriction.
 
 ## Current product state
 
-The current StudioNet deployment is `0x39CA4c8686E536d57Eb425996066742be790Dc8e`. The public desk is available at [afterline-shalyxs-projects.vercel.app](https://afterline-shalyxs-projects.vercel.app/), with the [contract explorer](https://explorer-studio.genlayer.com/address/0x39CA4c8686E536d57Eb425996066742be790Dc8e) and [live control assessment](https://afterline-shalyxs-projects.vercel.app/assessments/af-789d4557-71d6-4c1d-83a8-878a984757ba) available for review. The assessment is committed on-chain; its before and after SHA-256 commitments match and the contract readback is `no_damage`, `observed_change: no`, `evidence_quality: clear`, `confidence_band: high`, and `priority: routine_review`.
+The corrected StudioNet deployment is [`0xC0262244F0a1bEE29940012CcB4f4e2260865fB8`](https://explorer-studio.genlayer.com/address/0xC0262244F0a1bEE29940012CcB4f4e2260865fB8). The [public desk](https://afterline-ten.vercel.app/) and [distinct-image assessment](https://afterline-ten.vercel.app/assessments/af-katrina-20261021-consensus) use this deployment. The assessment transaction is finalized with `MAJORITY_AGREE`; persisted readback reports unclear change, limited evidence, low confidence and human review. [Exact hashes, licensing, transaction and reproduction steps](docs/LIVE_VERIFICATION_2026_10_21.md) are documented together.
 
-The identical-byte control is intentionally resolved deterministically before nondeterministic visual analysis. Changed image pairs still use GenLayer validator consensus and fail closed when validators disagree on image hashes, visible change, or evidence quality. No field-practitioner review has been completed yet.
+The previous deployment `0x39CA4c8686E536d57Eb425996066742be790Dc8e` used an identical-byte shortcut. Its control assessment does **not** demonstrate visual consensus or the corrected workflow. Production access is now public; an HTTP request without cookies returned 200 without an authentication redirect on October 21, 2026.
+
+Identical image bytes now fail before consensus and create no assessment. Every committed comparison must use the nondeterministic visual workflow. No field-practitioner review has been completed yet.
+
+The frontend decodes JPEG, PNG, or WebP uploads and re-encodes them to JPEG. Direct contract callers must submit JPEG. On-chain checks bound file size, dimensions, marker lengths, frame and scan structure, quantization presence, and the final end marker. These container checks are not a full entropy decoder or evidence of undamaged contents. Image-provider decode failures cannot create a successful visual assessment.
 
 ## Local verification
 
@@ -28,7 +32,7 @@ npm run build
 npm run dev
 ```
 
-The direct tests mock the vision result. They verify input validation, contradictory-output rejection, conservative human-review routing, image hash commitment, duplicate-ID protection, consensus tolerance for lead-detail variation, and fail-closed behavior for changed visible findings, evidence quality, or image hashes. They do not prove that a live Studio validator will agree on a real image pair; that remains a release gate.
+The 27 direct tests mock the vision result. They verify input validation, contradictory-output normalization, conservative routing, image commitments, duplicate-ID protection, and rejection of confidence disagreements or malformed images. Live visual consensus is demonstrated separately by the finalized USGS image-pair transaction documented above. This single real-image run does not establish a disaster-triage accuracy benchmark.
 
 ## Real-image data plan
 
@@ -43,4 +47,4 @@ The direct tests mock the vision result. They verify input validation, contradic
 - `get_assessment(assessment_id)` reads the committed result and image hashes.
 - `get_assessment_ids()` lists assessment identifiers.
 
-Triage routing is conservative: a clear, high-confidence no-change pair becomes `routine_review`; every visible-change, uncertain, or limited-evidence pair becomes `human_review`. Severity and confidence remain lead-model context, not autonomous routing authority.
+Triage routing is conservative: a clear no-change pair with consensus-supported high confidence becomes `routine_review`; every visible-change, uncertain, or limited-evidence pair becomes `human_review`. A confidence disagreement fails consensus and does not create a new assessment.

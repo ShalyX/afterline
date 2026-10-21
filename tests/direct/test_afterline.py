@@ -1,9 +1,13 @@
 import json
+from pathlib import Path
+
+import pytest
 
 
 CONTRACT = "contracts/afterline.py"
-BEFORE = b"\xff\xd8\xff\xe0before-public-sample"
-AFTER = b"\xff\xd8\xff\xe0after-public-sample"
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "sources"
+BEFORE = (FIXTURES / "Hurricane_Katrina_before.jpg").read_bytes()
+AFTER = (FIXTURES / "Hurricane_Katrina_after.jpg").read_bytes()
 
 
 def deploy(direct_deploy):
@@ -158,10 +162,11 @@ def test_consensus_commits_image_hashes_and_bounded_decision(direct_vm, direct_d
     assert json.loads(assessment["cue_codes_json"]) == ["debris", "roof_loss"]
 
 
-def test_identical_image_bytes_commit_deterministic_no_change(direct_vm, direct_deploy, direct_alice):
+def test_identical_image_bytes_cannot_claim_no_damage(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     direct_vm.sender = direct_alice
-    contract.assess_images(
+    with direct_vm.expect_revert("distinct earlier and later images"):
+        contract.assess_images(
         "same-image-control",
         "Katrina control",
         "New Orleans xBD reference site",
@@ -170,11 +175,7 @@ def test_identical_image_bytes_commit_deterministic_no_change(direct_vm, direct_
         BEFORE,
         BEFORE,
     )
-    assessment = contract.get_assessment("same-image-control")
-    assert assessment["damage_level"] == "no_damage"
-    assert assessment["observed_change"] == "no"
-    assert assessment["priority"] == "routine_review"
-    assert assessment["before_image_sha256"] == assessment["after_image_sha256"]
+    assert contract.get_assessment_ids() == {}
 
 
 def test_duplicate_assessment_id_cannot_overwrite_prior_record(direct_vm, direct_deploy, direct_alice):
@@ -188,7 +189,7 @@ def test_duplicate_assessment_id_cannot_overwrite_prior_record(direct_vm, direct
 def test_non_image_bytes_are_rejected_before_consensus(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     direct_vm.sender = direct_alice
-    with direct_vm.expect_revert("must be JPEG, PNG, or WebP"):
+    with direct_vm.expect_revert("must be JPEG"):
         contract.assess_images(
             "bad-image",
             "Exercise",
@@ -208,7 +209,7 @@ def test_consensus_accepts_same_triage_with_non_material_label_variance(direct_v
     assert contract._consensus_equivalent(leader, validator) is True
 
 
-def test_consensus_accepts_same_visible_change_when_lead_detail_varies(direct_vm, direct_deploy, direct_alice):
+def test_consensus_rejects_confidence_disagreement_when_visible_change_matches(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     leader = consensus_assessment(
         damage_level="major",
@@ -221,14 +222,14 @@ def test_consensus_accepts_same_visible_change_when_lead_detail_varies(direct_vm
         cue_codes=["debris"],
     )
 
-    assert contract._consensus_equivalent(leader, validator) is True
+    assert contract._consensus_equivalent(leader, validator) is False
 
 
 def test_consensus_ignores_lead_priority_but_rejects_different_observed_change(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     leader = consensus_assessment()
 
-    assert contract._consensus_equivalent(leader, consensus_assessment(confidence_band="medium")) is True
+    assert contract._consensus_equivalent(leader, consensus_assessment(confidence_band="medium")) is False
     assert contract._consensus_equivalent(
         leader,
         consensus_assessment(observed_change="unclear", confidence_band="medium"),
@@ -260,10 +261,44 @@ def test_consensus_keeps_no_damage_and_minor_separate(direct_vm, direct_deploy, 
     assert contract._consensus_equivalent(no_damage, minor) is False
 
 
-def test_consensus_accepts_confidence_threshold_disagreement_when_visible_change_matches(direct_vm, direct_deploy, direct_alice):
+def test_consensus_rejects_confidence_disagreement_even_for_limited_evidence(direct_vm, direct_deploy, direct_alice):
     contract = deploy(direct_deploy)
     leader = consensus_assessment(evidence_quality="limited", confidence_band="high")
     validator = consensus_assessment(evidence_quality="limited", confidence_band="medium")
 
     assert leader["priority"] == validator["priority"] == "human_review"
-    assert contract._consensus_equivalent(leader, validator) is True
+    assert contract._consensus_equivalent(leader, validator) is False
+
+
+@pytest.mark.parametrize("confidence", ["medium", "low"])
+def test_routine_review_requires_validator_confidence_agreement(direct_vm, direct_deploy, confidence):
+    contract = deploy(direct_deploy)
+    leader = consensus_assessment(damage_level="no_damage", observed_change="no")
+    validator = consensus_assessment(damage_level="no_damage", observed_change="no", confidence_band=confidence)
+    assert contract._consensus_equivalent(leader, validator) is False
+
+
+@pytest.mark.parametrize("confidence", ["high", "medium", "low"])
+def test_persisted_no_change_routing_uses_agreed_confidence(direct_vm, direct_deploy, direct_alice, confidence):
+    contract = deploy(direct_deploy)
+    direct_vm.mock_llm(r"(?s).*AFTERLINE_VISUAL_REVIEW.*", result(
+        damage_level="no_damage", observed_change="no", confidence_band=confidence,
+        cue_codes=["no_clear_change"], rationale="No visible change in the stated focus area.",
+    ))
+    submit(contract, direct_vm, direct_alice)
+    assessment = contract.get_assessment("flood-test-001")
+    assert assessment["confidence_band"] == confidence
+    assert assessment["priority"] == ("routine_review" if confidence == "high" else "human_review")
+
+
+@pytest.mark.parametrize("image", [
+    b"\xff\xd8\xff\xe0fake-jpeg\xff\xd9",
+    BEFORE[:-2],
+    b"\xff\xd8\xff\xe0\xff\xffshort\xff\xd9",
+], ids=["forged-header", "missing-end-marker", "invalid-segment-length"])
+def test_malformed_images_rejected_without_persisting_assessment(direct_vm, direct_deploy, direct_alice, image):
+    contract = deploy(direct_deploy)
+    direct_vm.sender = direct_alice
+    with direct_vm.expect_revert("invalid JPEG"):
+        contract.assess_images("malformed", "Exercise", "Site", "Visible change only", "Public image", image, AFTER)
+    assert contract.get_assessment_ids() == {}

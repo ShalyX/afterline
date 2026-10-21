@@ -81,12 +81,82 @@ def _validate_image(value: bytes, field_name: str) -> bytes:
         raise gl.vm.UserError(f"{ERROR_EXPECTED} {field_name} must be an image")
     if len(value) > MAX_IMAGE_BYTES:
         raise gl.vm.UserError(f"{ERROR_EXPECTED} {field_name} exceeds {MAX_IMAGE_BYTES} bytes")
-    is_jpeg = value.startswith(b"\xff\xd8\xff")
-    is_png = value.startswith(b"\x89PNG\r\n\x1a\n")
-    is_webp = len(value) >= 12 and value[:4] == b"RIFF" and value[8:12] == b"WEBP"
-    if not (is_jpeg or is_png or is_webp):
-        raise gl.vm.UserError(f"{ERROR_EXPECTED} {field_name} must be JPEG, PNG, or WebP")
+    # The public client decodes uploads and re-encodes them as JPEG. Direct
+    # callers must provide that same format; a signature alone is insufficient.
+    if not value.startswith(b"\xff\xd8\xff"):
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} {field_name} must be JPEG")
+    if not _jpeg_structure_valid(value):
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} {field_name}: invalid JPEG structure")
     return value
+
+
+def _jpeg_structure_valid(value: bytes) -> bool:
+    """Bound container structure, dimensions and scans; visual decoding follows.
+
+    This is not a complete JPEG entropy decoder. Provider decode errors must
+    roll back; passing these checks never supplies a visual classification.
+    """
+    if len(value) < 32 or not value.endswith(b"\xff\xd9"):
+        return False
+    offset = 2
+    frame = False
+    scan = False
+    quantization = False
+    while offset < len(value):
+        if value[offset] != 255:
+            return False
+        while offset < len(value) and value[offset] == 255:
+            offset += 1
+        if offset >= len(value):
+            return False
+        marker = value[offset]
+        offset += 1
+        if marker == 217:
+            return offset == len(value) and frame and scan and quantization
+        if marker in (0, 216) or 208 <= marker <= 215:
+            return False
+        if offset + 2 > len(value):
+            return False
+        length = int.from_bytes(value[offset:offset + 2], "big")
+        end = offset + length
+        if length < 2 or end > len(value) - 2:
+            return False
+        if marker in (192, 194):
+            if frame or length < 11 or value[offset + 2] != 8:
+                return False
+            height = int.from_bytes(value[offset + 3:offset + 5], "big")
+            width = int.from_bytes(value[offset + 5:offset + 7], "big")
+            components = value[offset + 7]
+            if not (0 < height <= 4096 and 0 < width <= 4096):
+                return False
+            if components not in (1, 3) or length != 8 + 3 * components:
+                return False
+            frame = True
+        elif marker == 219:
+            if length < 67:
+                return False
+            quantization = True
+        elif marker == 218:
+            if not frame or not quantization or length < 8:
+                return False
+            components = value[offset + 2]
+            if components not in (1, 2, 3) or length != 6 + 2 * components:
+                return False
+            scan = True
+            offset = end
+            entropy_start = offset
+            while offset < len(value) - 1:
+                if value[offset] != 255:
+                    offset += 1
+                elif value[offset + 1] == 0 or 208 <= value[offset + 1] <= 215:
+                    offset += 2
+                else:
+                    break
+            if offset == entropy_start:
+                return False
+            continue
+        offset = end
+    return False
 
 
 def _parse_assessment(raw_value) -> dict:
@@ -183,21 +253,8 @@ def _analyze_pair(
     before_hash = hashlib.sha256(before_image).hexdigest()
     after_hash = hashlib.sha256(after_image).hexdigest()
 
-    # Exact byte equality is a deterministic control signal. Treat it as a
-    # confirmed no-change pair so validators do not manufacture consensus
-    # disagreement from harmless differences in visual wording or confidence.
     if before_hash == after_hash:
-        return {
-            "damage_level": "no_damage",
-            "observed_change": "no",
-            "evidence_quality": "clear",
-            "confidence_band": "high",
-            "priority": "routine_review",
-            "cue_codes": ["no_clear_change"],
-            "rationale": "The submitted earlier and later image bytes are identical, so the pair contains no observable byte-level change.",
-            "before_image_sha256": before_hash,
-            "after_image_sha256": after_hash,
-        }
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} submit distinct earlier and later images")
 
     prompt = f"""
 AFTERLINE_VISUAL_REVIEW
@@ -243,22 +300,21 @@ def _equivalent(leader: dict, validator: dict) -> bool:
     required = (
         "observed_change",
         "evidence_quality",
+        "confidence_band",
         "before_image_sha256",
         "after_image_sha256",
     )
     if any(field not in leader or field not in validator for field in required):
         return False
 
-    # The public contract claim is deliberately narrow: validators must agree
-    # that the same committed image pair shows a visible change (or does not)
-    # and whether that evidence is usable. Severity, confidence, cue codes,
-    # rationale, and the derived route remain lead-model detail. Requiring
-    # those descriptive fields to match made real changed pairs fail closed on
-    # harmless model wording variance without improving evidence integrity.
+    # Confidence affects routine-review eligibility and must be independently
+    # agreed. A disagreement rejects consensus rather than committing a route
+    # based solely on the leader's confidence.
     return all(
         (
             leader.get("observed_change") == validator.get("observed_change"),
             leader.get("evidence_quality") == validator.get("evidence_quality"),
+            leader.get("confidence_band") == validator.get("confidence_band"),
             leader.get("before_image_sha256") == validator.get("before_image_sha256"),
             leader.get("after_image_sha256") == validator.get("after_image_sha256"),
         )
@@ -269,8 +325,8 @@ def _conservative_priority(result: dict) -> str:
     """Route only the consensus-stable visible-change finding.
 
     A changed pair is always a human-review item. The contract must not turn
-    one lead model's severity or confidence into an autonomous urgent route
-    when those details are intentionally outside the consensus boundary.
+    one lead model's severity into an autonomous urgent route. Confidence is
+    independently agreed because it controls routine-review eligibility.
     """
     if (
         result.get("observed_change") == "no"
@@ -356,42 +412,23 @@ class Afterline(gl.Contract):
         before_hash = hashlib.sha256(before_image).hexdigest()
         after_hash = hashlib.sha256(after_image).hexdigest()
 
-        # Identical bytes are a deterministic control case. Resolve it outside
-        # the nondeterministic VM so every validator observes the same stored
-        # result instead of spending consensus on a fact that is already exact.
         if before_hash == after_hash:
-            result = {
-                "damage_level": "no_damage",
-                "observed_change": "no",
-                "evidence_quality": "clear",
-                "confidence_band": "high",
-                "priority": "routine_review",
-                "cue_codes": ["no_clear_change"],
-                "rationale": "The submitted earlier and later image bytes are identical, so the pair contains no observable byte-level change.",
-                "before_image_sha256": before_hash,
-                "after_image_sha256": after_hash,
-            }
-        else:
-            def leader_fn() -> dict:
-                return _analyze_pair(
-                    before_image,
-                    after_image,
-                    incident_name,
-                    location_label,
-                    focus_area,
-                )
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} submit distinct earlier and later images")
 
-            def validator_fn(leader_result: gl.vm.Result) -> bool:
-                if not isinstance(leader_result, gl.vm.Return):
-                    return False
-                try:
-                    leader = _leader_assessment(leader_result.calldata)
-                    validator = leader_fn()
-                    return _equivalent(leader, validator)
-                except Exception:
-                    return False
+        def leader_fn() -> dict:
+            return _analyze_pair(before_image, after_image, incident_name, location_label, focus_area)
 
-            result = dict(gl.vm.run_nondet_unsafe(leader_fn, validator_fn))
+        def validator_fn(leader_result: gl.vm.Result) -> bool:
+            if not isinstance(leader_result, gl.vm.Return):
+                return False
+            try:
+                leader = _leader_assessment(leader_result.calldata)
+                validator = leader_fn()
+                return _equivalent(leader, validator)
+            except Exception:
+                return False
+
+        result = _leader_assessment(dict(gl.vm.run_nondet_unsafe(leader_fn, validator_fn)))
         result["priority"] = _conservative_priority(result)
         self.assessments[assessment_id] = Assessment(
             assessment_id=assessment_id,

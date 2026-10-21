@@ -10,10 +10,12 @@ Turn a cited pair of public before-and-after images into an auditable, consensus
 
 ## Current verification evidence
 
-- Public desk: https://afterline-shalyxs-projects.vercel.app/
-- StudioNet contract: `0x39CA4c8686E536d57Eb425996066742be790Dc8e`
-- Live control assessment: `af-789d4557-71d6-4c1d-83a8-878a984757ba`
-- Verified readback: identical before/after SHA-256 commitments, `no_damage`, `observed_change: no`, `evidence_quality: clear`, `confidence_band: high`, and `routine_review`.
+- Public desk: https://afterline-ten.vercel.app/
+- Corrected StudioNet contract: `0xC0262244F0a1bEE29940012CcB4f4e2260865fB8`
+- Distinct-image assessment: `af-katrina-20261021-consensus`
+- Finalized transaction: `0xadd15b9dcf62dabf982fd50b0affc4fc47381550b8c622c26e9d0dbd9b6727f8`, `MAJORITY_AGREE`.
+- Verified readback: distinct SHA-256 commitments, unclear change, limited evidence, low confidence, and `human_review`. See [the live verification record](LIVE_VERIFICATION_2026_10_21.md).
+- The previous identical-image control did not exercise image consensus and is not evidence of the corrected workflow.
 - Remaining release gate: independent field-practitioner review of categories, routing language, and representative examples.
 
 ## Release gates
@@ -29,7 +31,7 @@ Turn a cited pair of public before-and-after images into an auditable, consensus
 
 - Deploy the vision contract to StudioNet and confirm the validator/model path accepts both images in one transaction.
 - Run live positive, no-change, ambiguous, mismatched-pair, low-quality, malformed input, oversize input, and duplicate-ID cases.
-- Confirm the leader and validators agree on both image hashes, visible change, and evidence quality. Damage severity, confidence, cue codes, rationale, and routing are supporting lead-model details; any changed pair is stored as `human_review`.
+- Confirm the leader and validators agree on both image hashes, visible change, evidence quality, and confidence. Confidence disagreement must fail consensus. Damage severity, cue codes and rationale remain supporting model descriptions. Any changed pair is stored as `human_review`.
 - Inspect finalized reads from the contract. A transaction badge alone is not a successful assessment.
 
 ### 3. Product gate
